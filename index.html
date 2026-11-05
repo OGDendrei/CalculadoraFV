@@ -1,0 +1,324 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Simulador de desajuste FV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: columna de 760px. Barra de resultados fija arriba, ajustes, una tarjeta por rama (módulos en serie), explicación del cálculo. */
+:root {
+  --bg: #edf0f4;
+  --panel: #ffffff;
+  --line: #cdd5df;
+  --fg: #122032;
+  --mute: #566377;
+  --accent: #b05a16;
+  --accent-ink: #ffffff;
+  --cell: #1d4e89;
+  --ok: #1f7a4d;
+  --ok-bg: #dff3e8;
+  --bad: #b3261e;
+  --bad-bg: #fbe4e1;
+  --warn: #b57f00;
+  --warn-bg: #fbf0d2;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1520; --panel: #152130; --line: #28384c; --fg: #e6ecf4; --mute: #93a2b7;
+    --accent: #e8a05c; --accent-ink: #1a1209; --cell: #7db3ee;
+    --ok: #5cc18a; --ok-bg: #123425; --bad: #f08a82; --bad-bg: #3a1b19;
+    --warn: #e6b84a; --warn-bg: #3a2f10;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1520; --panel: #152130; --line: #28384c; --fg: #e6ecf4; --mute: #93a2b7;
+  --accent: #e8a05c; --accent-ink: #1a1209; --cell: #7db3ee;
+  --ok: #5cc18a; --ok-bg: #123425; --bad: #f08a82; --bad-bg: #3a1b19;
+  --warn: #e6b84a; --warn-bg: #3a2f10;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.45; }
+.wrap { max-width: 760px; margin-inline: auto; padding-inline: 16px; padding-block: 20px 40px; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 7vw, 38px); line-height: 1.05; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: .03em; text-transform: uppercase; margin: 0; color: var(--accent); }
+.sub { color: var(--mute); margin: 4px 0 0; font-size: 15px; }
+.mono { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* barra de resultados */
+.res { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; padding: 10px 12px; gap: 8px; border-color: var(--cell); box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+.res .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.res .k { font-size: 12px; color: var(--mute); text-transform: uppercase; letter-spacing: .06em; }
+.res .n { font-family: var(--font-mono); font-weight: 600; font-size: clamp(17px, 5vw, 24px); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.res .n small { font-size: .6em; color: var(--mute); font-weight: 500; }
+.res .ref { font-size: 14px; color: var(--mute); }
+.good { color: var(--ok); }
+.badc { color: var(--bad); }
+
+/* ajustes */
+.cfg { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+.fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fld > span { font-size: 13px; color: var(--mute); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+input[type="number"] { width: 100%; font: 600 16px var(--font-mono); padding: 8px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); text-align: center; min-width: 0; }
+input[type="number"]:focus-visible, button:focus-visible, input[type="checkbox"]:focus-visible { outline: 3px solid var(--cell); outline-offset: 2px; }
+.step { display: grid; grid-template-columns: 38px 1fr 38px; align-items: center; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--bg); }
+.step button { border: 0; background: transparent; color: var(--fg); font: 600 20px var(--font-body); height: 38px; cursor: pointer; }
+.step button:hover { background: var(--line); }
+.step b { text-align: center; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sw { display: flex; gap: 10px; align-items: center; cursor: pointer; }
+.sw input { width: 20px; height: 20px; accent-color: var(--accent); }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { font: 600 15px var(--font-body); padding: 9px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn.main { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* ramas */
+.strings { display: flex; flex-direction: column; gap: 12px; }
+.sh { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; align-items: baseline; }
+.sh .st { font-size: 14px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.mods { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+.mod { border: 1px solid var(--line); border-radius: 6px; padding: 8px 6px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); min-width: 0; }
+.mod.lim { border-color: var(--bad); background: var(--bad-bg); }
+.mod.byp { border-style: dashed; opacity: .8; }
+.mh { font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; }
+.f { display: grid; grid-template-columns: 1.1rem 1fr; gap: 4px; align-items: center; }
+.f span { font-size: 12px; color: var(--mute); font-family: var(--font-mono); }
+.f input { padding: 6px 2px; font-size: 15px; }
+.mp { font-family: var(--font-mono); font-weight: 600; font-size: 14px; text-align: center; font-variant-numeric: tabular-nums; }
+.bar { display: flex; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; }
+.bar .used { background: var(--cell); }
+.bar .lost { background: repeating-linear-gradient(45deg, var(--warn) 0 3px, var(--warn-bg) 3px 6px); }
+.tag { font-size: 11px; line-height: 1.2; min-height: 2.4em; color: var(--mute); text-align: center; }
+.tag.l { color: var(--bad); font-weight: 600; }
+.tag.w { color: var(--warn); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--mute); }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.legend .a::before { background: var(--cell); }
+.legend .b::before { background: repeating-linear-gradient(45deg, var(--warn) 0 3px, var(--warn-bg) 3px 6px); }
+
+/* explicación */
+.how { display: flex; flex-direction: column; gap: 14px; }
+.how .blk { display: flex; flex-direction: column; gap: 4px; }
+.how .blk b { font-weight: 600; }
+.how .ln { font-family: var(--font-mono); font-size: 14px; overflow-x: auto; white-space: nowrap; padding-block: 1px; }
+.how .note { font-size: 14px; color: var(--mute); }
+.how .warnbox { font-size: 14px; background: var(--warn-bg); border-left: 4px solid var(--warn); padding: 6px 10px; border-radius: 0 6px 6px 0; }
+.rule { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rule div { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font-size: 14px; }
+.rule b { font-family: var(--font-display); font-size: 17px; letter-spacing: .03em; text-transform: uppercase; color: var(--accent); display: block; }
+@media (max-width: 480px) { .rule { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: no-preference) { .bar i { transition: width .2s; } }
+</style>
+
+<main class="wrap">
+  <header>
+    <h1>Simulador de desajuste FV</h1>
+    <p class="sub">Cambia la tensión y la intensidad de cualquier módulo y mira cómo se ve afectada su rama y todo el generador.</p>
+  </header>
+
+  <section class="card res" aria-live="polite" aria-label="Resultado del generador">
+    <div class="row">
+      <div><div class="k">Tensión</div><div class="n" id="r-v"></div></div>
+      <div><div class="k">Intensidad</div><div class="n" id="r-i"></div></div>
+      <div><div class="k">Potencia</div><div class="n" id="r-p"></div></div>
+      <div><div class="k">Diferencia</div><div class="n" id="r-l"></div></div>
+    </div>
+    <div class="ref" id="r-ref"></div>
+  </section>
+
+  <div class="rule">
+    <div><b>En serie</b>Manda la intensidad menor. Las tensiones se suman.</div>
+    <div><b>En paralelo</b>Misma tensión en todas las ramas. Las intensidades se suman.</div>
+  </div>
+
+  <section class="card">
+    <h2>Instalación</h2>
+    <div class="cfg">
+      <div class="fld"><span>Módulos en serie por rama (N<sub>S</sub>)</span>
+        <div class="step"><button data-a="ns-" aria-label="Menos módulos en serie">−</button><b id="ns-n"></b><button data-a="ns+" aria-label="Más módulos en serie">+</button></div></div>
+      <div class="fld"><span>Ramas en paralelo (N<sub>P</sub>)</span>
+        <div class="step"><button data-a="np-" aria-label="Menos ramas">−</button><b id="np-n"></b><button data-a="np+" aria-label="Más ramas">+</button></div></div>
+      <div class="fld"><span>Módulo sano (V y A)</span>
+        <div class="pair"><input type="number" id="base-v" min="0" step="0.1" inputmode="decimal" aria-label="Tensión del módulo sano"><input type="number" id="base-i" min="0" step="0.1" inputmode="decimal" aria-label="Intensidad del módulo sano"></div></div>
+      <label class="sw"><input type="checkbox" id="byp"><span>Diodos de bypass</span></label>
+    </div>
+    <div class="btns">
+      <button class="btn" data-a="p-ok">Todos sanos</button>
+      <button class="btn main" data-a="p-half">Un módulo a la mitad</button>
+      <button class="btn" data-a="p-zero">Un módulo a 0 A</button>
+    </div>
+  </section>
+
+  <section class="strings" id="strings"></section>
+  <div class="legend"><span class="a">Intensidad que aprovecha</span><span class="b">Intensidad que pierde</span></div>
+
+  <section class="card how" id="how" aria-label="Cómo se calcula"></section>
+</main>
+
+<script>
+/* ===== cálculo (funciones puras) ===== */
+function calcString(ms, bypass) {
+  const cur = ms.map(m => m.i);
+  let cands = bypass ? Array.from(new Set(cur.filter(x => x > 0))) : [Math.min.apply(null, cur)];
+  if (!cands.length) cands = [0];
+  let best = null;
+  cands.forEach(c => {
+    const act = ms.map(m => m.i >= c);
+    const V = ms.reduce((a, m, k) => a + (act[k] ? m.v : 0), 0);
+    const P = V * c;
+    if (!best || P > best.P + 1e-9) best = {I: c, V: V, P: P, act: act};
+  });
+  return best;
+}
+function calcGen(strs) {
+  const live = strs.filter(r => r.P > 0);
+  const V = live.length ? Math.min.apply(null, live.map(r => r.V)) : 0;
+  const I = live.reduce((a, r) => a + r.I, 0);
+  return {V: V, I: I, P: V * I, live: live};
+}
+/* ===== fin cálculo ===== */
+
+const S = {ns: 4, np: 2, vn: 20, inn: 1, bypass: false, mods: []};
+const $ = s => document.querySelector(s);
+const fmt = n => (Math.round(n * 100) / 100).toLocaleString('es-ES', {maximumFractionDigits: 2});
+const num = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) && n > 0 ? n : 0; };
+const mk = () => ({v: S.vn, i: S.inn});
+
+function resize() {
+  const old = S.mods;
+  S.mods = [];
+  for (let s = 0; s < S.np; s++) {
+    const row = [];
+    for (let m = 0; m < S.ns; m++) row.push(old[s] && old[s][m] ? old[s][m] : mk());
+    S.mods.push(row);
+  }
+}
+function resetAll() { S.mods = []; resize(); }
+
+function build() {
+  $('#ns-n').textContent = S.ns;
+  $('#np-n').textContent = S.np;
+  $('#strings').innerHTML = S.mods.map((row, s) => `
+    <div class="card" id="s-${s}">
+      <div class="sh"><h2>Rama ${s + 1}</h2><span class="st" id="st-${s}"></span></div>
+      <div class="mods">${row.map((m, k) => `
+        <div class="mod" id="m-${s}-${k}">
+          <div class="mh"><span>M${k + 1}</span></div>
+          <div class="f"><span>V</span><input type="number" id="v-${s}-${k}" min="0" step="0.1" inputmode="decimal" value="${m.v}" aria-label="Tensión del módulo ${k + 1} de la rama ${s + 1}"></div>
+          <div class="f"><span>A</span><input type="number" id="i-${s}-${k}" min="0" step="0.1" inputmode="decimal" value="${m.i}" aria-label="Intensidad del módulo ${k + 1} de la rama ${s + 1}"></div>
+          <div class="mp"><span id="mp-${s}-${k}"></span> W</div>
+          <div class="bar"><i class="used" id="bu-${s}-${k}"></i><i class="lost" id="bl-${s}-${k}"></i></div>
+          <div class="tag" id="tg-${s}-${k}"></div>
+        </div>`).join('')}
+      </div>
+    </div>`).join('');
+  $('#base-v').value = S.vn;
+  $('#base-i').value = S.inn;
+  $('#byp').checked = S.bypass;
+}
+
+function update() {
+  const res = S.mods.map(row => calcString(row, S.bypass));
+  const gen = calcGen(res);
+  const healthy = S.ns * S.np * S.vn * S.inn;
+  const diff = gen.P - healthy;
+  const pct = healthy > 0 ? diff / healthy * 100 : 0;
+  const scale = Math.max(0.1, S.inn, ...S.mods.flat().map(m => m.i));
+
+  S.mods.forEach((row, s) => {
+    const r = res[s];
+    const sumP = row.reduce((a, m) => a + m.v * m.i, 0);
+    $('#st-' + s).innerHTML = `<span class="mono">${fmt(r.V)} V · ${fmt(r.I)} A · ${fmt(r.P)} W</span>`;
+    row.forEach((m, k) => {
+      const el = $(`#m-${s}-${k}`);
+      const byp = !r.act[k];
+      const over = m.i > r.I + 1e-9;
+      const others = row.some((o, j) => j !== k && o.i > r.I + 1e-9);
+      const lim = !byp && Math.abs(m.i - r.I) < 1e-9 && others;
+      el.classList.toggle('lim', lim);
+      el.classList.toggle('byp', byp);
+      $(`#mp-${s}-${k}`).textContent = fmt(m.v * m.i);
+      const used = byp ? 0 : r.I, lost = byp ? m.i : Math.max(0, m.i - r.I);
+      $(`#bu-${s}-${k}`).style.width = (used / scale * 100) + '%';
+      $(`#bl-${s}-${k}`).style.width = (lost / scale * 100) + '%';
+      const tg = $(`#tg-${s}-${k}`);
+      if (byp) { tg.className = 'tag w'; tg.textContent = 'Puenteado'; }
+      else if (lim) { tg.className = 'tag l'; tg.textContent = 'Limita la rama'; }
+      else if (over) { tg.className = 'tag w'; tg.textContent = 'Pierde ' + fmt(m.i - r.I) + ' A'; }
+      else { tg.className = 'tag'; tg.textContent = 'OK'; }
+    });
+  });
+
+  $('#r-v').innerHTML = `${fmt(gen.V)}<small> V</small>`;
+  $('#r-i').innerHTML = `${fmt(gen.I)}<small> A</small>`;
+  $('#r-p').innerHTML = `${fmt(gen.P)}<small> W</small>`;
+  const dc = diff < -0.005 ? 'badc' : 'good';
+  $('#r-l').innerHTML = `<span class="${dc}">${diff > 0.005 ? '+' : ''}${fmt(diff)}<small> W</small></span>`;
+  $('#r-ref').textContent = `Generador sano: ${S.ns} · ${S.np} · ${fmt(S.vn * S.inn)} W = ${fmt(healthy)} W` + (healthy > 0 ? ` (${diff > 0.005 ? '+' : ''}${fmt(pct)} %)` : '');
+
+  // explicación
+  const lines = S.mods.map((row, s) => {
+    const r = res[s];
+    const sumP = row.reduce((a, m) => a + m.v * m.i, 0);
+    const act = row.map((m, k) => r.act[k] ? m.v : null).filter(x => x !== null);
+    const bypIdx = row.map((m, k) => r.act[k] ? null : 'M' + (k + 1)).filter(Boolean);
+    const minIdx = row.map((m, k) => m.i === r.I ? 'M' + (k + 1) : null).filter(Boolean);
+    const iNote = S.bypass && bypIdx.length ? `${bypIdx.join(', ')} puenteado` : `la menor, ${minIdx.join(', ')}`;
+    return `<div class="blk"><b>Rama ${s + 1}</b>
+      <div class="ln">I = ${fmt(r.I)} A <span class="note">(${iNote})</span></div>
+      <div class="ln">V = ${act.map(fmt).join(' + ')} = ${fmt(r.V)} V</div>
+      <div class="ln">P = ${fmt(r.V)} · ${fmt(r.I)} = ${fmt(r.P)} W</div>
+      <div class="note">Cada módulo por libre daría ${fmt(sumP)} W. La rama pierde ${fmt(Math.max(0, sumP - r.P))} W por desajuste.</div></div>`;
+  }).join('');
+
+  const vs = gen.live.map(r => r.V);
+  const differ = vs.length > 1 && (Math.max.apply(null, vs) - Math.min.apply(null, vs)) > 1e-6;
+  const genBlk = `<div class="blk"><b>Generador</b>
+      <div class="ln">I = ${res.map(r => fmt(r.I)).join(' + ')} = ${fmt(gen.I)} A</div>
+      <div class="ln">V = ${fmt(gen.V)} V</div>
+      <div class="ln">P = ${fmt(gen.V)} · ${fmt(gen.I)} = ${fmt(gen.P)} W</div>
+      ${differ ? '<div class="warnbox">Las ramas tienen tensiones distintas. En paralelo todas trabajan a la misma, así que las de mayor tensión bajan a la menor (modelo simplificado).</div>' : '<div class="note">Todas las ramas tienen la misma tensión, así que se suman las intensidades sin más.</div>'}</div>`;
+  $('#how').innerHTML = `<h2>Cómo se calcula</h2><div class="how">${lines}${genBlk}</div>`;
+}
+
+document.addEventListener('input', e => {
+  const t = e.target, id = t.id || '';
+  if (id === 'base-v') { S.vn = num(t.value); update(); return; }
+  if (id === 'base-i') { S.inn = num(t.value); update(); return; }
+  const p = id.split('-');
+  if ((p[0] === 'v' || p[0] === 'i') && p.length === 3) {
+    S.mods[+p[1]][+p[2]][p[0]] = num(t.value);
+    update();
+  }
+});
+document.addEventListener('change', e => {
+  if (e.target.id === 'byp') { S.bypass = e.target.checked; update(); }
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-a]');
+  if (!b) return;
+  const a = b.dataset.a;
+  if (a === 'ns-' && S.ns > 1) S.ns--;
+  else if (a === 'ns+' && S.ns < 6) S.ns++;
+  else if (a === 'np-' && S.np > 1) S.np--;
+  else if (a === 'np+' && S.np < 4) S.np++;
+  else if (a === 'p-ok') resetAll();
+  else if (a === 'p-half') { resetAll(); S.mods[0][0].i = S.inn / 2; }
+  else if (a === 'p-zero') { resetAll(); S.mods[0][0].i = 0; }
+  if (a.startsWith('ns') || a.startsWith('np')) resize();
+  build(); update();
+});
+
+resize();
+S.mods[0][0].i = S.inn / 2;
+build();
+update();
+</script>
+
+</body></html>
